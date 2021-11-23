@@ -110,12 +110,18 @@ pub(crate) trait Parser {
             None => return Err(GonError::EscapeCharacterExpected)
         })
     }
-    
-    
-    
+
     fn skip_whitespace(&mut self) {
-        while self.peek().map_or(false, |c| is_whitespace(c)) {
-            self.next();
+        while self.peek().map_or(false, |c| is_whitespace(c) || c == '#') {
+            let c = self.next().unwrap();
+            if c == '#' {
+                loop {
+                    match self.next() {
+                        Some('\n') | None => break,
+                        _ => ()
+                    }
+                }
+            }
         }
     }
     
@@ -137,6 +143,7 @@ impl<'p> StrParser<'p> {
         Self(s.chars().peekable())
     }
 }
+
 impl<'p> Parser for StrParser<'p> {
     fn next(&mut self) -> Option<char> {
         self.0.next()

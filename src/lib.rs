@@ -46,6 +46,7 @@ impl Index<&str> for Gon {
         }
     }
 }
+
 impl Index<usize> for Gon {
     type Output = Gon;
     fn index(&self, index: usize) -> &Self::Output {
@@ -56,6 +57,7 @@ impl Index<usize> for Gon {
         }
     }
 }
+
 impl Gon {
     /// Tries to get the GON as a value of a specific type that can be converted from a string.
     /// Will panic on invalid type of object or a conversion fail. Use `try_get`
@@ -256,5 +258,37 @@ mod test {
             Gon::parse(r#""\b \f \n \r \t \" \\ \/""#).unwrap().str(),
             "\x08 \x0C \n \r \t \" \\ /"
         );
+    }
+
+    #[test]
+    fn comments() {
+        let gon = Gon::parse(r#"
+            a 12
+            b # a comment
+            13
+            # another comment
+            c 14
+            d 15 # and one more
+            array [A B C # A comment inside the array
+            D E] # a nice array
+            array2[#right next to the array
+                1 2 3 # Inside the array
+                4 5 6
+            ]
+            text " #hashes inside quoted strings aren't comments"
+            text2 Hashes_#inside_or_next_to_unquoted_strings_aren't_comments#  # the # after comments is included
+            "#).unwrap();
+        
+        assert_eq!(gon["a"].get::<i32>(), 12);
+        assert_eq!(gon["b"].get::<i32>(), 13);
+        assert_eq!(gon["c"].get::<i32>(), 14);
+        assert_eq!(gon["d"].get::<i32>(), 15);
+
+        assert_eq!(gon["array"].len(), 5);
+        assert_eq!(gon["array"][3].str(), "D");
+        assert_eq!(gon["array2"].len(), 6);
+        assert_eq!(gon["array2"][4].get::<i32>(), 5);
+        assert_eq!(gon["text"].str(), " #hashes inside quoted strings aren't comments");
+        assert_eq!(gon["text2"].str(), "Hashes_#inside_or_next_to_unquoted_strings_aren't_comments#");
     }
 }
