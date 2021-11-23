@@ -1,17 +1,24 @@
-use std::{collections::HashMap, fmt::Debug, iter::Peekable, ops::Index, str::{Chars, FromStr}};
+use std::{collections::HashMap, fmt::Debug, ops::Index, str::FromStr};
+
+use parser::{Parser, StrParser};
+
+mod parser;
 
 #[derive(Debug)]
 pub enum GonError {
     InvalidGon,
     StringExpected,
     EndOfFileExpected,
-    WhitespaceExpected,
     QuoteExpected,
     ClosingBraceExpected,
     ClosingBracketExpected,
     ValueExpected,
     DuplicateKey(String),
-    IO(std::io::Error)
+    UnexpectedEscapeCharacter(char),
+    EscapeCharacterExpected,
+    InvalidHexEscape,
+    InvalidUtf8,
+    HexEscapesNotSupported
 }
 
 #[derive(Debug)]
@@ -65,6 +72,8 @@ impl Gon {
         }
     }
 
+    /// Tries to get the GON as a value. In contrast to the `Gon::get` method, this won't panic and will instead return
+    /// a `Result`.
     pub fn try_get<T: FromStr>(&self) -> Result<T, GonGetError<<T as FromStr>::Err>> {
         match self {
             Self::Object(_) => Err(GonGetError::UnexpectedObject),
@@ -76,6 +85,8 @@ impl Gon {
         }
     }
 
+    /// Gives a reference to the string if the GON is a string and panics otherwise.
+    /// This doesn't copy the string in contrast to the `Gon::get::<String>` method.
     pub fn str(&self) -> &str {
         match self {
             Self::Object(_) => panic!("Tried to get GON object as str!"),
@@ -84,148 +95,48 @@ impl Gon {
         }
     }
 
+    /// Returns the size if the GON is an array and panics otherwise.
+    pub fn len(&self) -> usize {
+        match self {
+            Self::Array(arr) => arr.len(),
+            Self::Value(_) => panic!("Tried to int-index into GON value!"),
+            Self::Object(_) => panic!("Tried to int-index into GON object!")
+        }
+    }
+
     pub fn parse(s: &str) -> Result<Self, GonError> {
-        let p = &mut s.chars().peekable();
-        // the outermost braces are optional
-        let gon = if skip_whitespace_and_token('{', p) {
-            let gon = parse_object(p)?;
-            if !skip_whitespace_and_token('}', p) {
-                return Err(GonError::ClosingBraceExpected);
+        let mut p = StrParser::new(s);
+        p.skip_whitespace();
+        
+        // This has some ugly edge cases to make parsing of single values work
+        let gon = match p.peek() {
+            // Check for object/array
+            Some('{') | Some('[') => p.parse_val()?,
+            // try to parse as object otherwise because the outermost braces are optional
+            _ => match p.parse_object() {
+                // if that fails with a 'ValueExpected' error, it might be a single value
+                Err(GonError::ValueExpected) => {
+                    println!("Falling back to parsing value: {}", s);
+                    let mut p = StrParser::new(s);
+                    p.skip_whitespace();
+                    if let Ok(gon) = p.parse_val() {
+                        gon
+                    } else {
+                        // not an object and not a value, maybe improve the error message
+                        return Err(GonError::InvalidGon);
+                    }
+                },
+                res => res?
             }
-            gon
-        } else {
-            // This has some ugly edge cases to make parsing of single values work
-            let gon = match p.peek() {
-                Some('[') => parse_val(p)?,
-                _ => match parse_object(p) {
-                    Err(GonError::ValueExpected) => {
-                        println!("Falling back to parsing value: {}", s);
-                        let p = &mut s.chars().peekable();
-                        skip_whitespace(p);
-                        if let Ok(gon) = parse_val(p) {
-                            gon
-                        } else {
-                            return Err(GonError::InvalidGon);
-                        }
-                    },
-                    res@_ => res?
-                }
-            };
-            skip_whitespace(p);
-            gon
         };
+        p.skip_whitespace();
+    
         if p.peek().is_some() {
             Err(GonError::EndOfFileExpected)
         } else {
             Ok(gon)
         }
     }
-}
-
-type P<'a> = Peekable<Chars<'a>>;
-
-fn parse_object(p: &mut P) -> Result<Gon, GonError> {
-    let mut map = HashMap::new();
-    while !matches!(p.peek(), Some('}') | None) {
-        let key= parse_string(p)?;
-        skip_whitespace_and_token(':', p);
-        let val = parse_val(p)?;
-        if map.get(&key).is_some() {
-            return Err(GonError::DuplicateKey(key));
-        }
-        map.insert(key, val);
-        skip_whitespace_and_token(',', p);
-    }
-    Ok(Gon::Object(map))
-}
-
-fn parse_val<'a>(p: &mut P) -> Result<Gon, GonError> {
-    match p.peek() {
-        Some('{') => {
-            p.next();
-            skip_whitespace(p);
-            let val = parse_object(p)?;
-            if !matches!(p.next(), Some('}')) {
-                return Err(GonError::ClosingBraceExpected);
-            }
-            Ok(val)
-        },
-        Some('[') => {
-            p.next();
-            let mut arr = Vec::new();
-            skip_whitespace(p);
-            loop {
-                match p.peek() {
-                    Some(']') => {
-                        p.next();
-                        break;
-                    },
-                    None => return Err(GonError::ClosingBracketExpected),
-                    _ => {
-                        arr.push(parse_val(p)?);
-                        skip_whitespace_and_token(',', p);
-                    }
-                }
-            }
-            Ok(Gon::Array(arr))
-        }
-        Some(_) => parse_string(p).map(|val| Gon::Value(val)),
-        None => Err(GonError::ValueExpected)
-    }
-}
-
-fn parse_string(p: &mut P) -> Result<String, GonError> {
-    match p.peek() {
-        Some('\"') => {
-            p.next();
-            let mut res = String::new();
-            loop {
-                match p.next() {
-                    Some('\"') => break,
-                    Some(c) => res.push(c),
-                    None => return Err(GonError::QuoteExpected)
-                }
-            }
-            Ok(res)
-        },
-        Some(_) => {
-            let mut res = String::new();
-            loop {
-                match p.peek() {
-                    Some(c) if is_whitespace(*c) | is_token(*c) => break,
-                    None => break,
-                    Some(_) =>res.push(p.next().unwrap()),
-                }
-            }
-            Ok(res)
-        },
-        None => Err(GonError::StringExpected)
-    }
-}
-
-fn is_whitespace(c: char) -> bool {
-    matches!(c, ' ' | '\t' | '\n' | '\r')
-}
-
-fn is_token(c: char) -> bool {
-    matches!(c, '\"' | '{' | '}' |  '[' | ']' | ':' | ',')
-}
-
-fn skip_whitespace(p: &mut P<'_>) {
-    while p.peek().map_or(false, |c| is_whitespace(*c)) {
-        p.next();
-    }
-}
-
-/// Skips whitespace and and a single optional provided token. Returns if that token was skipped
-fn skip_whitespace_and_token(c: char, p: &mut P<'_>) -> bool {
-    skip_whitespace(p);
-    let skip = p.peek() == Some(&c);
-    if skip {
-        p.next();
-    }
-    skip_whitespace(p);
-    skip
 }
 
 #[doc = include_str!("../README.md")]
@@ -337,5 +248,13 @@ mod test {
             Hello World
         "#).unwrap();
         assert_eq!(obj["Hello"].str(), "World");
+    }
+
+    #[test]
+    fn escape_codes() {
+        assert_eq!(
+            Gon::parse(r#""\b \f \n \r \t \" \\ \/""#).unwrap().str(),
+            "\x08 \x0C \n \r \t \" \\ /"
+        );
     }
 }
