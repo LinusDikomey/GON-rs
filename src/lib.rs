@@ -87,6 +87,25 @@ impl Gon {
         }
     }
 
+    /// Gets the GON as an object and tries to retrieve a key. If the key isn't present, None is returned.
+    pub fn value(&self, key: &str) -> Option<&Gon> {
+        match self {
+            Self::Object(map) => map.get(key),
+            Self::Value(_) => panic!("Tried to string-index into GON value!"),
+            Self::Array(_) => panic!("Tried to string-index into GON array!")
+        }
+    }
+
+    /// Gets the GON as an object and tries to retrieve a key. If the key isn't present, None is returned.
+    /// If the key is present, it is parsed into T.
+    pub fn value_get<T: FromStr + Clone>(&self, key: &str) -> Option<T> {
+        match self {
+            Self::Object(map) => map.get(key).map(|v| v.get()),
+            Self::Value(_) => panic!("Tried to string-index into GON value!"),
+            Self::Array(_) => panic!("Tried to string-index into GON array!")
+        }
+    }
+
     /// Gives a reference to the string if the GON is a string and panics otherwise.
     /// This doesn't copy the string in contrast to the `Gon::get::<String>` method.
     pub fn str(&self) -> &str {
@@ -276,7 +295,8 @@ mod test {
                 4 5 6
             ]
             text " #hashes inside quoted strings aren't comments"
-            text2 Hashes_#inside_or_next_to_unquoted_strings_aren't_comments#  # the # after comments is included
+            text2 Hashes_#inside_or_next_to_unquoted_strings_aren't_comments#  # the # at the end of strings is
+            # included in the string
             "#).unwrap();
         
         assert_eq!(gon["a"].get::<i32>(), 12);
