@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use arrayvec::ArrayVec;
 
 use crate::Gon;
@@ -81,6 +83,25 @@ impl<T: FromGon> FromGon for Vec<T> {
             Gon::Object(_) | Gon::Value(_) => Err(FromGonError::ExpectedArray),
             Gon::Array(arr) => {
                 arr.into_iter().map(|entry| T::from_gon(entry)).collect::<Result<Vec<T>, _>>()
+            }
+        }
+    }
+}
+
+impl FromGon for Gon {
+    fn from_gon(gon: Gon) -> Result<Self, FromGonError>
+    where Self: Sized {
+        Ok(gon)
+    }
+}
+
+impl<T: FromGon> FromGon for HashMap<String, T> {
+    fn from_gon(gon: Gon) -> Result<Self, FromGonError>
+    where Self: Sized {
+        match gon {
+            Gon::Array(_) | Gon::Value(_) => Err(FromGonError::ExpectedObject),
+            Gon::Object(map) => {
+                map.into_iter().map(|(key, val)| Ok((key, T::from_gon(val)?))).collect::<Result<HashMap<String, T>, _>>()
             }
         }
     }
