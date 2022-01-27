@@ -2,7 +2,11 @@ use std::{collections::HashMap, fmt::Debug, ops::Index, str::FromStr};
 
 use parser::{Parser, StrParser};
 
-mod parser;
+pub mod parser;
+pub mod from;
+
+pub use gon_derive::FromGon;
+
 
 #[derive(Debug)]
 pub enum GonError {
@@ -18,8 +22,16 @@ pub enum GonError {
     EscapeCharacterExpected,
     InvalidHexEscape,
     InvalidUtf8,
-    HexEscapesNotSupported
+    HexEscapesNotSupported,
+    Custom(String)
 }
+impl std::fmt::Display for GonError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+impl std::error::Error for GonError { }
+
 
 #[derive(Debug)]
 pub enum GonGetError<E> {

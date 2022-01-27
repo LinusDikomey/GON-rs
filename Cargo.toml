@@ -4,3 +4,5 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+arrayvec = "0.7"
+gon_derive = { path = "gon_derive" }
