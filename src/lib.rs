@@ -41,7 +41,7 @@ pub enum GonGetError<E> {
     ConversionFailed(E)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Gon {
     Object(HashMap<String, Gon>),
     Array(Vec<Gon>),

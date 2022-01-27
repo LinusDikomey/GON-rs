@@ -27,14 +27,14 @@ impl From<std::num::ParseFloatError> for FromGonError {
     }
 }
 pub trait FromGon {
-    fn from_gon(gon: Gon) -> Result<Self, FromGonError> where Self: Sized;
+    fn from_gon(gon: &Gon) -> Result<Self, FromGonError> where Self: Sized;
 }
 
 macro_rules! parse_impls {
     ($($t: ty)*) => {
         $(
             impl FromGon for $t {
-                fn from_gon(gon: Gon) -> Result<Self, FromGonError> {
+                fn from_gon(gon: &Gon) -> Result<Self, FromGonError> {
                     match gon {
                         Gon::Value(val) => Ok(val.parse::<$t>()?),
                         Gon::Object(_) | Gon::Array(_) => Err(FromGonError::ExpectedValue)
@@ -48,16 +48,16 @@ macro_rules! parse_impls {
 parse_impls!(u8 u16 u32 u64 u128 i8 i16 i32 i64 i128);
 
 impl FromGon for String {
-    fn from_gon(gon: Gon) -> Result<Self, FromGonError> {
+    fn from_gon(gon: &Gon) -> Result<Self, FromGonError> {
         match gon {
-            Gon::Value(val) => Ok(val),
+            Gon::Value(val) => Ok(val.clone()),
             Gon::Object(_) | Gon::Array(_) => Err(FromGonError::ExpectedValue)
         }
     }
 }
 
 impl<T: FromGon, const N: usize> FromGon for [T; N] {
-    fn from_gon(gon: Gon) -> Result<Self, FromGonError>
+    fn from_gon(gon: &Gon) -> Result<Self, FromGonError>
     where Self: Sized {
         match gon {
             Gon::Object(_) | Gon::Value(_) => Err(FromGonError::ExpectedArray),
@@ -77,7 +77,7 @@ impl<T: FromGon, const N: usize> FromGon for [T; N] {
 }
 
 impl<T: FromGon> FromGon for Vec<T> {
-    fn from_gon(gon: Gon) -> Result<Self, FromGonError>
+    fn from_gon(gon: &Gon) -> Result<Self, FromGonError>
     where Self: Sized {
         match gon {
             Gon::Object(_) | Gon::Value(_) => Err(FromGonError::ExpectedArray),
@@ -89,19 +89,19 @@ impl<T: FromGon> FromGon for Vec<T> {
 }
 
 impl FromGon for Gon {
-    fn from_gon(gon: Gon) -> Result<Self, FromGonError>
+    fn from_gon(gon: &Gon) -> Result<Self, FromGonError>
     where Self: Sized {
-        Ok(gon)
+        Ok(gon.clone())
     }
 }
 
 impl<T: FromGon> FromGon for HashMap<String, T> {
-    fn from_gon(gon: Gon) -> Result<Self, FromGonError>
+    fn from_gon(gon: &Gon) -> Result<Self, FromGonError>
     where Self: Sized {
         match gon {
             Gon::Array(_) | Gon::Value(_) => Err(FromGonError::ExpectedObject),
             Gon::Object(map) => {
-                map.into_iter().map(|(key, val)| Ok((key, T::from_gon(val)?))).collect::<Result<HashMap<String, T>, _>>()
+                map.iter().map(|(key, val)| Ok((key.clone(), T::from_gon(val)?))).collect::<Result<HashMap<String, T>, _>>()
             }
         }
     }

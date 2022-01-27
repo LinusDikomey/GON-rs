@@ -20,7 +20,7 @@ pub fn derive_from_gon(input: TokenStream) -> TokenStream {
 
     let expanded = quote! {
         impl #impl_generics gon_rs::from::FromGon for #name #ty_generics #where_clause {
-            fn from_gon(gon: gon_rs::Gon) -> std::result::Result<Self, gon_rs::from::FromGonError> {
+            fn from_gon(gon: &gon_rs::Gon) -> std::result::Result<Self, gon_rs::from::FromGonError> {
                 #from_body
             }
         }
@@ -46,13 +46,13 @@ fn from_gon(data: &Data) -> proc_macro2::TokenStream {
                         let name = &f.ident;
                         let name_str = name.as_ref().unwrap().to_string();
                         quote_spanned! {f.span()=>
-                            #name: gon_rs::from::FromGon::from_gon(map.remove(#name_str).ok_or(gon_rs::from::FromGonError::Missing(&&#name_str))?)?,
+                            #name: gon_rs::from::FromGon::from_gon(map.get(#name_str).ok_or(gon_rs::from::FromGonError::Missing(&&#name_str))?)?,
                         }
                     });
                     quote! {
                         match gon {
                             gon_rs::Gon::Array(_) | gon_rs::Gon::Value(_) => std::result::Result::Err(gon_rs::from::FromGonError::ExpectedObject),
-                            gon_rs::Gon::Object(mut map) => std::result::Result::Ok(Self {
+                            gon_rs::Gon::Object(map) => std::result::Result::Ok(Self {
                                 #( #recurse )*
                             })
                         }
@@ -63,7 +63,7 @@ fn from_gon(data: &Data) -> proc_macro2::TokenStream {
                     let recurse = fields.unnamed.iter().enumerate().map(|(i, f)| {
                         //let index = Index::from(i);
                         quote_spanned! {f.span()=>
-                            gon_rs::from::FromGon::from_gon(arr[#i])
+                            gon_rs::from::FromGon::from_gon(&arr[#i])
                         }
                     });
                     quote! {
@@ -82,7 +82,7 @@ fn from_gon(data: &Data) -> proc_macro2::TokenStream {
                     quote! {
                         match gon {
                             gon_rs::Gon::Array(_) | gon_rs::Gon::Value(_) => std::result::Result::Err(gon_rs::from::FromGonError::ExpectedObject),
-                            gon_rs::Gon::Object(map) => std::result::Result::Ok(Self)
+                            gon_rs::Gon::Object(_) => std::result::Result::Ok(Self)
                         }
                     }
                 }
@@ -103,7 +103,7 @@ fn from_gon(data: &Data) -> proc_macro2::TokenStream {
                     gon_rs::Gon::Object(_) | gon_rs::Gon::Array(_) => std::result::Result::Err(gon_rs::from::FromGonError::ExpectedValue),
                     gon_rs::Gon::Value(val) => match val.as_str() {
                         #( #recurse )*
-                        _ =>  std::result::Result::Err(gon_rs::from::FromGonError::UnexpectedValue(val))
+                        _ =>  std::result::Result::Err(gon_rs::from::FromGonError::UnexpectedValue(val.to_owned()))
                     }
                 }
             }

@@ -21,5 +21,5 @@ fn derive_test() {
     "#;
 
     let gon = gon_rs::Gon::parse(gon_str).unwrap();
-    assert_eq!(Example::from_gon(gon).unwrap(), Example { a: 5, b: AnEnum::ValueB })
+    assert_eq!(Example::from_gon(&gon).unwrap(), Example { a: 5, b: AnEnum::ValueB })
 }
