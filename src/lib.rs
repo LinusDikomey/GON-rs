@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Debug, ops::Index, str::FromStr};
+use std::{collections::HashMap, fmt::Debug, ops::Index, str::FromStr, convert::Infallible};
 
 use parser::{Parser, StrParser};
 
@@ -38,6 +38,7 @@ pub enum GonGetError<E> {
     UnexpectedObject,
     UnexpectedArray,
     UnexpectedValue,
+    IndexOutOfBounds(usize),
     ConversionFailed(E)
 }
 
@@ -105,6 +106,24 @@ impl Gon {
             Self::Object(map) => map.get(key),
             Self::Value(_) => panic!("Tried to string-index into GON value!"),
             Self::Array(_) => panic!("Tried to string-index into GON array!")
+        }
+    }
+
+    /// Tries to get the GON as an object and then tries to retrieve a key.
+    pub fn try_value(&self, key: &str) -> Result<Option<&Gon>, GonGetError<Infallible>> {
+        match self {
+            Self::Object(map) => Ok(map.get(key)),
+            Self::Value(_) => Err(GonGetError::UnexpectedValue),
+            Self::Array(_) => Err(GonGetError::UnexpectedArray)
+        }
+    }
+
+    /// Tries to get the GON as an array and tries to index it.
+    pub fn try_index(&self, index: usize) -> Result<&Gon, GonGetError<Infallible>> {
+        match self {
+            Self::Array(arr) => Ok(arr.get(index).ok_or(GonGetError::IndexOutOfBounds(index))?),
+            Self::Value(_) => Err(GonGetError::UnexpectedValue),
+            Self::Object(_) => Err(GonGetError::UnexpectedObject)
         }
     }
 

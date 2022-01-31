@@ -103,7 +103,7 @@ fn from_gon(data: &Data) -> proc_macro2::TokenStream {
                     gon_rs::Gon::Object(_) | gon_rs::Gon::Array(_) => std::result::Result::Err(gon_rs::from::FromGonError::ExpectedValue),
                     gon_rs::Gon::Value(val) => match val.as_str() {
                         #( #recurse )*
-                        _ =>  std::result::Result::Err(gon_rs::from::FromGonError::UnexpectedValue(val.to_owned()))
+                        _ =>  std::result::Result::Err(gon_rs::from::FromGonError::UnexpectedVariant(val.to_owned()))
                     }
                 }
             }

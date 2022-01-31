@@ -2,20 +2,41 @@ use std::collections::HashMap;
 
 use arrayvec::ArrayVec;
 
-use crate::Gon;
+use crate::{Gon, GonGetError, GonError};
 
 #[derive(Debug)]
 pub enum FromGonError {
+    Gon(GonError),
     ParseInt(std::num::ParseIntError),
     ParseFloat(std::num::ParseFloatError),
+    Parse(Box<dyn std::error::Error>),
     Missing(&'static &'static str),
     ExpectedValue,
     ExpectedArray,
     ExpectedObject,
     InvalidVariant(Box<String>),
     InvalidLength { expected: usize, found: usize },
-    UnexpectedValue(String)
+    IndexOutOfBounds(usize),
+    UnexpectedValue,
+    UnexpectedArray,
+    UnexpectedObject,
+    UnexpectedVariant(String),
+    Other(Box<dyn std::error::Error>),
+    Unknown
 }
+impl std::fmt::Display for FromGonError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+impl std::error::Error for FromGonError { }
+
+impl From<GonError> for FromGonError {
+    fn from(err: GonError) -> Self {
+        Self::Gon(err)
+    }
+}
+
 impl From<std::num::ParseIntError> for FromGonError {
     fn from(e: std::num::ParseIntError) -> Self {
         Self::ParseInt(e)
@@ -26,6 +47,18 @@ impl From<std::num::ParseFloatError> for FromGonError {
         Self::ParseFloat(e)
     }
 }
+impl<E: std::error::Error + 'static> From<GonGetError<E>> for FromGonError {
+    fn from(err: GonGetError<E>) -> Self {
+        match err {
+            GonGetError::UnexpectedValue => FromGonError::UnexpectedValue,
+            GonGetError::UnexpectedArray => FromGonError::UnexpectedArray,
+            GonGetError::UnexpectedObject => FromGonError::UnexpectedObject,
+            GonGetError::IndexOutOfBounds(index) => FromGonError::IndexOutOfBounds(index),
+            GonGetError::ConversionFailed(err) => FromGonError::Parse(Box::new(err))
+        }
+    }
+}
+
 pub trait FromGon {
     fn from_gon(gon: &Gon) -> Result<Self, FromGonError> where Self: Sized;
 }
@@ -104,5 +137,31 @@ impl<T: FromGon> FromGon for HashMap<String, T> {
                 map.iter().map(|(key, val)| Ok((key.clone(), T::from_gon(val)?))).collect::<Result<HashMap<String, T>, _>>()
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::FromGonError;
+
+
+    #[test]
+    fn err_conversions() -> Result<(), FromGonError> {
+        let gon = crate::Gon::parse(r#"
+            list [1 2 3]
+            map {
+                a 1
+                b hello
+                c 12.5
+            }
+        "#)?;
+
+        let list_gon: [i32; 3] = gon.try_value("list")?
+            .map(|arr| Result::<[i32; 3], FromGonError>::Ok([arr[0].try_get()?, arr[1].try_get()?, arr[2].try_get()?]))
+            .unwrap_or(Ok([0, 0, 0]))?;
+
+        assert_eq!(list_gon, [1, 2, 3]);
+        
+        Ok(())
     }
 }
