@@ -14,7 +14,7 @@ pub enum FromGonError {
     ExpectedValue,
     ExpectedArray,
     ExpectedObject,
-    InvalidVariant(Box<String>),
+    InvalidVariant(String),
     InvalidLength { expected: usize, found: usize },
     IndexOutOfBounds(usize),
     UnexpectedValue,
