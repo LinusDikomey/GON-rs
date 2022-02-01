@@ -1,5 +1,6 @@
 use std::{collections::HashMap, fmt::Debug, ops::Index, str::FromStr, convert::Infallible};
 
+use from::FromGonError;
 use parser::{Parser, StrParser};
 
 pub mod parser;
@@ -144,6 +145,14 @@ impl Gon {
             Self::Object(_) => panic!("Tried to get GON object as str!"),
             Self::Array(_) => panic!("Tried to get GON array as str!"),
             Self::Value(val) => val
+        }
+    }
+
+    /// Tries to get the gon as a string value.
+    pub fn try_str(&self) -> Result<&str, FromGonError> {
+        match self {
+            Self::Object(_) | Self::Array(_) => Err(FromGonError::ExpectedValue),
+            Self::Value(val) => Ok(val)
         }
     }
 
